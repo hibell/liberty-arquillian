@@ -1157,15 +1157,18 @@ public class WLPManagedContainer implements DeployableContainer<WLPManagedContai
                      .append(" on ")
                      .append(containerConfiguration.getServerName());
 
-               Throwable ffdcXChain = getFfdcWithNestedCauseChain(applicationName);
+               String exceptionFound = line.substring(line.indexOf("The exception message was: ") + 27);
+               boolean definitionExceptionFound = exceptionFound.contains("DefinitionException");
+               boolean deploymentExceptionFound = exceptionFound.contains("DeploymentException") ||
+                                                  exceptionFound.contains("InconsistentSpecializationException") ||
+                                                  exceptionFound.contains("UnserializableDependencyException");
 
-               if (line.contains("DefinitionException")) {
+
+               if (definitionExceptionFound && !deploymentExceptionFound) {
                   log.finest("DefinitionException found in line" + line + " of file " + messagesFilePath);
-                  DefinitionException cause = new javax.enterprise.inject.spi.DefinitionException(line, ffdcXChain);
+                  DefinitionException cause = new javax.enterprise.inject.spi.DefinitionException(exceptionFound);
                   throw new DeploymentException(sb.toString(), cause);
-               } else if (line.contains("DeploymentException") ||
-                          line.contains("InconsistentSpecializationException") ||
-                          line.contains("UnserializableDependencyException")) {
+               } else if (deploymentExceptionFound && !definitionExceptionFound) {
                   /*
                    * The CDI specification allows an implementation to throw a subclass of
                    * javax.enterprise.inject.spi.DeploymentException. Weld has three types
@@ -1175,16 +1178,15 @@ public class WLPManagedContainer implements DeployableContainer<WLPManagedContai
                    *  - org.jboss.weld.exceptions.UnserializableDependencyException
                    */
                   log.finest("DeploymentException found in line" + line + " of file " + messagesFilePath);
-                  javax.enterprise.inject.spi.DeploymentException cause = new javax.enterprise.inject.spi.DeploymentException(line, ffdcXChain);
+                  javax.enterprise.inject.spi.DeploymentException cause = new javax.enterprise.inject.spi.DeploymentException(exceptionFound);
                   throw new DeploymentException(sb.toString(), cause);
                } else {
                   /*
-                   * Application failed to deploy due to some other exception.
+                   * Application failed to deploy due to some other exception -- throw FFDC chain instead.
                    */
-                  String exceptionFound = line.substring(line.indexOf("The exception message was: ") + 27);
-                  sb.append(": ");
-                  sb.append(exceptionFound);
+
                   log.finest("A exception was found in line " + line + " of file " + messagesFilePath);
+                  Throwable ffdcXChain = getFfdcWithNestedCauseChain(applicationName);
                   throw new DeploymentException(sb.toString(), ffdcXChain);
                }
             } else if (line.contains("CWWKZ0001I") && line.contains(applicationName)) {
@@ -1224,7 +1226,7 @@ public class WLPManagedContainer implements DeployableContainer<WLPManagedContai
        File[] ffdcFiles = getFfdcFilesSince(archiveDeployTimes.get(appName));
 
        // Get StateChangeException FFDC file for this application
-       File ffdc = findStateChangeExceptionFfdcFileForApp(appName, ffdcFiles);
+       File ffdc = findFfdcFileForApp(appName, ffdcFiles);
 
        Throwable cause = null;
 
@@ -1445,7 +1447,7 @@ public class WLPManagedContainer implements DeployableContainer<WLPManagedContai
     * @throws FileNotFoundException
     * @throws IOException
     */
-   private File findStateChangeExceptionFfdcFileForApp(String appName, File[] ffdcFiles) {
+   private File findFfdcFileForApp(String appName, File[] ffdcFiles) {
 
        BufferedReader br = null;
        try {
@@ -1463,16 +1465,10 @@ public class WLPManagedContainer implements DeployableContainer<WLPManagedContai
 
                // See if it fulfills the criteria
                try {
-
-                   boolean fileIsForStateChangeException = false;
                    boolean fileIsForCorrectApplication = false;
 
                    String line;
                    while ((line = br.readLine()) != null) {
-
-                       fileIsForStateChangeException = fileIsForStateChangeException || line
-                               .contains("Stack Dump = com.ibm.ws.container.service.state.StateChangeException");
-                       log.finest("fileIsForStateChangeException:" + fileIsForStateChangeException + " " + line);
 
                        fileIsForCorrectApplication = fileIsForCorrectApplication
                                || line.contains("appName") && line.contains(appName);
@@ -1480,7 +1476,7 @@ public class WLPManagedContainer implements DeployableContainer<WLPManagedContai
                                + " " + line);
 
                        // Have we found all the criteria we are looking for?
-                       if (fileIsForStateChangeException && fileIsForCorrectApplication) {
+                       if (fileIsForCorrectApplication) {
                            // We have found what we are looking for
                            log.finest("Found StateChangeExceptionFfdc for " + appName + ": "
                                    + ffdcFile.getAbsolutePath());
