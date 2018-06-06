@@ -1157,38 +1157,8 @@ public class WLPManagedContainer implements DeployableContainer<WLPManagedContai
                      .append(" on ")
                      .append(containerConfiguration.getServerName());
 
-               String exceptionFound = line.substring(line.indexOf("The exception message was: ") + 27);
-               boolean definitionExceptionFound = exceptionFound.contains("DefinitionException");
-               boolean deploymentExceptionFound = exceptionFound.contains("DeploymentException") ||
-                                                  exceptionFound.contains("InconsistentSpecializationException") ||
-                                                  exceptionFound.contains("UnserializableDependencyException");
-
-
-               if (definitionExceptionFound && !deploymentExceptionFound) {
-                  log.finest("DefinitionException found in line" + line + " of file " + messagesFilePath);
-                  DefinitionException cause = new javax.enterprise.inject.spi.DefinitionException(exceptionFound);
-                  throw new DeploymentException(sb.toString(), cause);
-               } else if (deploymentExceptionFound && !definitionExceptionFound) {
-                  /*
-                   * The CDI specification allows an implementation to throw a subclass of
-                   * javax.enterprise.inject.spi.DeploymentException. Weld has three types
-                   * such exceptions:
-                   *  - org.jboss.weld.exceptions.DeploymentException
-                   *  - org.jboss.weld.exceptions.InconsistentSpecializationException
-                   *  - org.jboss.weld.exceptions.UnserializableDependencyException
-                   */
-                  log.finest("DeploymentException found in line" + line + " of file " + messagesFilePath);
-                  javax.enterprise.inject.spi.DeploymentException cause = new javax.enterprise.inject.spi.DeploymentException(exceptionFound);
-                  throw new DeploymentException(sb.toString(), cause);
-               } else {
-                  /*
-                   * Application failed to deploy due to some other exception -- throw FFDC chain instead.
-                   */
-
-                  log.finest("A exception was found in line " + line + " of file " + messagesFilePath);
-                  Throwable ffdcXChain = getFfdcWithNestedCauseChain(applicationName);
-                  throw new DeploymentException(sb.toString(), ffdcXChain);
-               }
+               Throwable ffdcXChain = getFfdcWithNestedCauseChain(applicationName);
+               throw new DeploymentException(sb.toString(), ffdcXChain);
             } else if (line.contains("CWWKZ0001I") && line.contains(applicationName)) {
                throw new DeploymentException("Application " + applicationName +
                      " started unexpectedly even though it never reached the STARTED state. This should never happen.");
@@ -1447,7 +1417,7 @@ public class WLPManagedContainer implements DeployableContainer<WLPManagedContai
     * @throws FileNotFoundException
     * @throws IOException
     */
-   private File findFfdcFileForApp(String appName, File[] ffdcFiles) {
+   private File 1170findFfdcFileForApp(String appName, File[] ffdcFiles) {
 
        BufferedReader br = null;
        try {
